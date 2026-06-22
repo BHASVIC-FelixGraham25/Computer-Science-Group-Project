@@ -1,0 +1,66 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+function getVersionPlaceholder() {
+	// Find the meeting version from the script tag
+	const scriptTag = Array.from(document.getElementsByTagName('script')).find((script) =>
+		script.src.includes('/blueboard/scripts/app.')
+	);
+	if (scriptTag) {
+		const match = scriptTag.src.match(/\d+\.\d+\.\d+-[a-z0-9]+/i);
+		const defaultVersion = '99.11212.999';
+		if (match && match[0]) {
+			const BLUEBOARD_VERSION = match[0];
+			if (BLUEBOARD_VERSION === 'development') {
+				return defaultVersion;
+			}
+			if (BLUEBOARD_VERSION.includes('-')) {
+				// When the version includes the commit id, remove the commit id.
+				return BLUEBOARD_VERSION.split('-')[0];
+			}
+			return BLUEBOARD_VERSION;
+		}
+	}
+	return null;
+}
+
+async function fetchECS(apiUrl) {
+	const url = new URL(apiUrl);
+	const clientName = 'Whiteboard-Web';
+	const clientVersion = '1.0.0.0';
+	const noWindow = typeof window === 'undefined';
+	url.pathname = `config/v1/${clientName}/${clientVersion}`;
+	const queryParams = new URLSearchParams(noWindow ? undefined : window.location.search);
+	const userId = queryParams.get('userId');
+	const userTenantId = queryParams.get('userTenantId');
+	url.searchParams.set('userId', userId);
+	url.searchParams.set('tenantId', userTenantId);
+	url.searchParams.set('version', getVersionPlaceholder());
+	if (userId && userTenantId) {
+		fetch(url.href);
+	}
+}
+// Map of environment names to ECS API URLs
+const ecsApiMap = {
+	prod: 'https://ecs.office.com',
+	int: 'https://config.edge.skype.net',
+	prodgcch: 'https://config.ecs.gov.teams.microsoft.us',
+	proddod: 'https://config.ecs.dod.teams.microsoft.us',
+	prodag08: 'https://config.ecs.teams.eaglex.ic.gov',
+	prodag09: 'https://config.ecs.teams.microsoft.scloud'
+};
+
+// Get the environment value from the meta tag
+const envMetaTag = document.getElementById('custom-env-tag');
+const envValue = envMetaTag?.getAttribute('data-env') || null;
+
+// Check if the environment value exists in the map
+if (
+	window.localStorage &&
+	window.localStorage.getItem('ECS:EnableECSPrefetchAtIndexHtml') === 'true' &&
+	ecsApiMap[envValue]
+) {
+	window.localStorage.removeItem('ECS:EnableECSPrefetchAtIndexHtml');
+	window.microsoftWhiteboardECSPrefetchAtIndexHtml = true;
+	// Fetch the ECS API URL based on the environment value
+	fetchECS(ecsApiMap[envValue]);
+}
